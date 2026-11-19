@@ -5,6 +5,7 @@ package kratos
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ory/hydra/v2/driver/config"
 	"github.com/ory/hydra/v2/fosite"
+	"github.com/ory/hydra/v2/x/loginstats"
 	client "github.com/ory/kratos-client-go"
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/otelx"
@@ -71,10 +73,115 @@ func (k *Default) Authenticate(ctx context.Context, name, secret string) (sessio
 		},
 	}).Execute()
 	if err != nil {
-		return nil, fosite.ErrNotFound.WithWrap(err)
+		// The outward contract is unchanged: every credential failure keeps
+		// surfacing as fosite.ErrNotFound, which the ROPC grant turns into the
+		// same invalid_grant response for both unknown accounts and bad
+		// passwords. The internal cause is attached to the error chain so the
+		// login-attempt classifier can keep operational granularity (and tell a
+		// dependency outage apart from a genuine rejection) without opening an
+		// account-enumeration channel on the HTTP response.
+		return nil, fosite.ErrNotFound.WithWrap(classifyLoginError(err))
 	}
 
 	return &res.Session, nil
+}
+
+// classifyLoginError translates a Kratos native-login API failure into an
+// internal sentinel while preserving the original error as the wrapped cause.
+// It never changes what the caller eventually returns to the OAuth2 client.
+func classifyLoginError(err error) error {
+	var apiErr client.GenericOpenAPIError
+	if !errors.As(err, &apiErr) {
+		// No HTTP response (DNS, connection refused, timeout, ...): an
+		// infrastructure condition, not a credential problem.
+		return joinError{outer: loginstats.ErrBackendUnavailable, inner: err}
+	}
+
+	status := effectiveStatus(apiErr)
+
+	// A 5xx response means the identity backend could not adjudicate the
+	// credentials. It must not be counted as a wrong password.
+	if status >= 500 {
+		return joinError{outer: loginstats.ErrBackendUnavailable, inner: err}
+	}
+
+	// 4xx responses are adjudicated credential failures. The structured error
+	// id, when the body is parseable, separates an unknown identifier from a
+	// bad password internally; otherwise the conservative credential default
+	// applies.
+	switch loginReasonFromBody(apiErr.Body()) {
+	case "identifier_unknown", "account_not_found":
+		return joinError{outer: loginstats.ErrCredentialAccountUnknown, inner: err}
+	case "credentials_invalid", "password_violation", "error_validation":
+		return joinError{outer: loginstats.ErrCredentialPasswordBad, inner: err}
+	default:
+		// Conservative default: any other 4xx is still a credential rejection,
+		// never an outage.
+		return joinError{outer: loginstats.ErrCredentialPasswordBad, inner: err}
+	}
+}
+
+// effectiveStatus resolves the HTTP status code even when the SDK could not
+// decode the body. It prefers the structured code in the JSON payload and
+// falls back to the status text the SDK stores in GenericOpenAPIError.Error().
+func effectiveStatus(apiErr client.GenericOpenAPIError) int {
+	if code := httpStatusFromBody(apiErr.Body()); code > 0 {
+		return code
+	}
+	return statusFromText(apiErr.Error())
+}
+
+// statusFromText extracts a leading three-digit HTTP code from strings like
+// "400 Bad Request". It returns 0 when no code is present.
+func statusFromText(status string) int {
+	if len(status) < 3 {
+		return 0
+	}
+	code := 0
+	for i := 0; i < 3; i++ {
+		d := status[i] - '0'
+		if d > 9 {
+			return 0
+		}
+		code = code*10 + int(d)
+	}
+	return code
+}
+
+// joinError keeps both the internal classification sentinel and the original
+// SDK error in a single chain, so errors.Is can find either.
+type joinError struct {
+	outer, inner error
+}
+
+func (e joinError) Error() string   { return e.outer.Error() + ": " + e.inner.Error() }
+func (e joinError) Unwrap() []error { return []error{e.outer, e.inner} }
+
+// loginErrorBody is the subset of the Kratos error payload we inspect. Fields
+// are optional, so every access is nil-safe.
+type loginErrorBody struct {
+	Error *struct {
+		ID      string                 `json:"id"`
+		Reason  string                 `json:"reason"`
+		Code    int                    `json:"code"`
+		Details map[string]interface{} `json:"details"`
+	} `json:"error"`
+}
+
+func httpStatusFromBody(body []byte) int {
+	var parsed loginErrorBody
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.Error == nil {
+		return 0
+	}
+	return parsed.Error.Code
+}
+
+func loginReasonFromBody(body []byte) string {
+	var parsed loginErrorBody
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.Error == nil {
+		return ""
+	}
+	return parsed.Error.ID
 }
 
 func (k *Default) DisableSession(ctx context.Context, identityProviderSessionID string) (err error) {

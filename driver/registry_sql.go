@@ -42,6 +42,7 @@ import (
 	"github.com/ory/hydra/v2/persistence"
 	"github.com/ory/hydra/v2/persistence/sql"
 	"github.com/ory/hydra/v2/x"
+	"github.com/ory/hydra/v2/x/loginstats"
 	"github.com/ory/hydra/v2/x/oauth2cors"
 	"github.com/ory/pop/v6"
 	"github.com/ory/x/contextx"
@@ -100,6 +101,8 @@ type RegistrySQL struct {
 
 	initialPing func(ctx context.Context, l *logrusx.Logger, p *sql.BasePersister) error
 	middlewares []negroni.Handler
+
+	loginAttemptRecorder loginstats.Recorder
 }
 
 var (
@@ -360,6 +363,20 @@ func (m *RegistrySQL) Logger() *logrusx.Logger {
 		m.l = logrusx.New("Ory Hydra", config.Version)
 	}
 	return m.l
+}
+
+// LoginAttemptRecorder returns the process-wide login attempt recorder. It is
+// constructed lazily from configuration and falls back to a no-op recorder
+// when the feature is disabled, keeping the default deployment free of any
+// new metric dimensions.
+func (m *RegistrySQL) LoginAttemptRecorder() loginstats.Recorder {
+	if m.loginAttemptRecorder == nil {
+		m.loginAttemptRecorder = loginstats.NewRecorder(
+			m.conf.LoginAttemptStatsConfig(context.Background()),
+			m.Logger(),
+		)
+	}
+	return m.loginAttemptRecorder
 }
 
 func (m *RegistrySQL) ClientHasher() fosite.Hasher {

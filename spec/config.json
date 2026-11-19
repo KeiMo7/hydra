@@ -836,6 +836,73 @@
             }
           }
         },
+        "login_attempt_stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Bounded classification of login-related attempt outcomes. Disabled by default; when enabled, emits the hydra_login_attempts_total metric and matching structured events without changing any external error response.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enables bounded login attempt classification.",
+              "default": false
+            },
+            "salt": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Optional dedicated salts for irreversible account hashing, current salt first. Falls back to secrets.system when empty."
+            },
+            "account_cardinality": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1000,
+              "description": "Maximum number of distinct account labels before overflow bucketing."
+            },
+            "dedup_cardinality": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10000,
+              "description": "Maximum number of in-flight attempt keys kept for duplicate detection."
+            },
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ipv4_prefix": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 32,
+                  "default": 24
+                },
+                "ipv6_prefix": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 128,
+                  "default": 48
+                },
+                "cardinality": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 256
+                }
+              }
+            },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "When set, rate-limited JSONL spool path used if metric exposition is unavailable."
+                },
+                "max_lines_per_minute": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 60
+                }
+              }
+            }
+          }
+        },
         "client_credentials": {
           "type": "object",
           "additionalProperties": false,

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -17,7 +18,9 @@ import (
 	"github.com/ory/hydra/v2/fosite"
 	"github.com/ory/hydra/v2/x"
 	"github.com/ory/hydra/v2/x/events"
+	"github.com/ory/hydra/v2/x/loginstats"
 	"github.com/ory/x/httprouterx"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/otelx"
 	keysetpagination "github.com/ory/x/pagination/keysetpagination_v2"
 	"github.com/ory/x/pagination/tokenpagination"
@@ -594,9 +597,40 @@ func (h *Handler) rejectOAuth2LoginRequest(w http.ResponseWriter, r *http.Reques
 
 	events.Trace(ctx, events.LoginRejected, events.WithClientID(f.Client.GetID()), events.WithSubject(f.Subject))
 
+	// Record the end-user decision in the shared taxonomy. A rejection is a
+	// terminal failure for this attempt even though the response itself is a
+	// successful 200 carrying a redirect URL; recording it here keeps the
+	// success-rate metric honest without changing that response.
+	h.r.LoginAttemptRecorder().Record(ctx, loginstats.Attempt{
+		EntryPoint: loginstats.EntryPointAdmin,
+		Account:    f.Subject,
+		Remote:     httpx.ClientIP(r),
+		Err:        fosite.ErrAccessDenied,
+		Hint:       loginstats.Hint{Reason: loginRejectionReason(&payload)},
+		DedupKey:   loginChallengeKey(challenge),
+	})
+
 	h.r.Writer().Write(w, r, &flow.OAuth2RedirectTo{
 		RedirectTo: urlx.SetQuery(ru, url.Values{"login_verifier": {verifier}}).String(),
 	})
+}
+
+// loginRejectionReason maps the login provider's rejection payload to the
+// internal device/user-decision reason. The default access_denied semantics
+// represent an explicit user denial; an explicit cancellation is kept
+// distinct. Unknown values fall back to the generic denial within the same
+// bounded category.
+func loginRejectionReason(payload *flow.RequestDeniedError) loginstats.Reason {
+	if payload != nil && strings.EqualFold(payload.Name, "user_cancelled") {
+		return loginstats.ReasonDeviceUserCancelled
+	}
+	return loginstats.ReasonDeviceUserDenied
+}
+
+// loginChallengeKey returns a stable dedup key for an admin challenge so a
+// retry of the same challenge report is counted once.
+func loginChallengeKey(challenge string) string {
+	return "login-challenge:" + challenge
 }
 
 // Get OAuth 2.0 Consent Request
@@ -1072,11 +1106,27 @@ func (h *Handler) acceptUserCodeRequest(w http.ResponseWriter, r *http.Request) 
 	userCodeRequest, err := h.r.OAuth2Storage().GetUserCodeSession(r.Context(), userCodeSignature, nil)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, fosite.ErrInvalidRequest.WithWrap(err).WithHint(`The 'user_code' session could not be found or has expired or is otherwise malformed.`))
+		h.r.LoginAttemptRecorder().Record(ctx, loginstats.Attempt{
+			EntryPoint: loginstats.EntryPointAdmin,
+			Remote:     httpx.ClientIP(r),
+			GrantType:  loginstats.GrantDeviceCode,
+			Err:        fosite.ErrInvalidRequest,
+			Hint:       loginstats.Hint{Reason: loginstats.ReasonDeviceUserCodeBad},
+			DedupKey:   "device-challenge:" + challenge,
+		})
 		return
 	}
 
 	if err := h.r.UserCodeStrategy().ValidateUserCode(ctx, userCodeRequest, reqBody.UserCode); err != nil {
 		h.r.Writer().WriteError(w, r, fosite.ErrInvalidRequest.WithWrap(err).WithHint(`The 'user_code' session could not be found or has expired or is otherwise malformed.`))
+		h.r.LoginAttemptRecorder().Record(ctx, loginstats.Attempt{
+			EntryPoint: loginstats.EntryPointAdmin,
+			Remote:     httpx.ClientIP(r),
+			GrantType:  loginstats.GrantDeviceCode,
+			Err:        fosite.ErrInvalidRequest,
+			Hint:       loginstats.Hint{Reason: loginstats.ReasonDeviceUserCodeBad},
+			DedupKey:   "device-challenge:" + challenge,
+		})
 		return
 	}
 
@@ -1119,6 +1169,12 @@ func (h *Handler) acceptUserCodeRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	events.Trace(ctx, events.DeviceUserCodeAccepted, events.WithClientID(userCodeRequest.GetClient().GetID()))
+	h.r.LoginAttemptRecorder().Record(ctx, loginstats.Attempt{
+		EntryPoint: loginstats.EntryPointAdmin,
+		Remote:     httpx.ClientIP(r),
+		GrantType:  loginstats.GrantDeviceCode,
+		DedupKey:   "device-challenge:" + challenge,
+	})
 	h.r.Writer().Write(w, r, &flow.OAuth2RedirectTo{
 		RedirectTo: urlx.SetQuery(ru, url.Values{"device_verifier": {verifier}, "client_id": {userCodeRequest.GetClient().GetID()}}).String(),
 	})

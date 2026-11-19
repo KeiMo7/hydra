@@ -123,6 +123,18 @@ const (
 	KeyTokenHook                                 = "oauth2.token_hook"         // #nosec G101
 	KeyDevelopmentMode                           = "dev"
 	KeyFeatureFlagsLegacyAllowInsecureOrigins    = "feature_flags.legacy_allow_insecure_origins"
+
+	// Bounded login-attempt failure classification. All keys default to the
+	// zero value so the feature is inert until explicitly enabled.
+	KeyLoginAttemptStatsEnabled            = "oauth2.login_attempt_stats.enabled"
+	KeyLoginAttemptStatsSalt               = "oauth2.login_attempt_stats.salt"
+	KeyLoginAttemptStatsAccountCardinality = "oauth2.login_attempt_stats.account_cardinality"
+	KeyLoginAttemptStatsSourceIPv4Prefix   = "oauth2.login_attempt_stats.source.ipv4_prefix"
+	KeyLoginAttemptStatsSourceIPv6Prefix   = "oauth2.login_attempt_stats.source.ipv6_prefix"
+	KeyLoginAttemptStatsSourceCardinality  = "oauth2.login_attempt_stats.source.cardinality"
+	KeyLoginAttemptStatsDedupCardinality   = "oauth2.login_attempt_stats.dedup_cardinality"
+	KeyLoginAttemptStatsFallbackPath       = "oauth2.login_attempt_stats.fallback.path"
+	KeyLoginAttemptStatsFallbackRateLimit  = "oauth2.login_attempt_stats.fallback.max_lines_per_minute"
 )
 
 const DSNMemory = "memory"

@@ -30,6 +30,7 @@ import (
 	"github.com/ory/hydra/v2/fosite/token/jwt"
 	"github.com/ory/hydra/v2/x"
 	"github.com/ory/hydra/v2/x/events"
+	"github.com/ory/hydra/v2/x/loginstats"
 	"github.com/ory/x/httprouterx"
 	"github.com/ory/x/josex"
 	"github.com/ory/x/otelx"
@@ -766,6 +767,8 @@ func (h *Handler) performOAuth2DeviceVerificationFlow(w http.ResponseWriter, r *
 		return
 	} else if err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, attemptDedupKey(r), err, loginstats.Hint{})
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
@@ -773,6 +776,8 @@ func (h *Handler) performOAuth2DeviceVerificationFlow(w http.ResponseWriter, r *
 	req, sig, err := h.r.OAuth2Storage().GetDeviceCodeSessionByRequestID(ctx, f.DeviceCodeRequestID.String(), &Session{})
 	if err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, attemptDedupKey(r), err, loginstats.Hint{})
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
@@ -781,6 +786,8 @@ func (h *Handler) performOAuth2DeviceVerificationFlow(w http.ResponseWriter, r *
 	session, err := h.updateSessionWithRequest(ctx, f, r, req, req.GetSession().(*Session))
 	if err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, attemptDedupKey(r), err, loginstats.Hint{})
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
@@ -807,12 +814,16 @@ func (h *Handler) performOAuth2DeviceVerificationFlow(w http.ResponseWriter, r *
 		return nil
 	}); err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, attemptDedupKey(r), err, loginstats.Hint{})
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
 
 	redirectURL := urlx.SetQuery(h.c.DeviceDoneURL(ctx), url.Values{"client_id": {f.Client.GetID()}}).String()
 	http.Redirect(w, r, redirectURL, http.StatusFound)
+	h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+		f.Subject, loginstats.GrantDeviceCode, attemptDedupKey(r), nil, loginstats.Hint{})
 }
 
 // OAuth2 Device Flow
@@ -880,10 +891,13 @@ type _ struct {
 //	  x-ory-ratelimit-bucket: hydra-public-high
 func (h *Handler) oAuth2DeviceFlow(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	dedupKey := attemptDedupKey(r)
 
 	request, err := h.r.OAuth2Provider().NewDeviceRequest(ctx, r)
 	if err != nil {
 		h.r.OAuth2Provider().WriteAccessError(ctx, w, request, err)
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, dedupKey, err, loginstats.Hint{})
 		return
 	}
 
@@ -896,10 +910,14 @@ func (h *Handler) oAuth2DeviceFlow(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.r.OAuth2Provider().NewDeviceResponse(ctx, request, session)
 	if err != nil {
 		h.r.OAuth2Provider().WriteAccessError(ctx, w, request, err)
+		h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+			"", loginstats.GrantDeviceCode, dedupKey, err, loginstats.Hint{})
 		return
 	}
 
 	h.r.OAuth2Provider().WriteDeviceResponse(ctx, w, request, resp)
+	h.recordLoginAttempt(r, loginstats.EntryPointDevice,
+		"", loginstats.GrantDeviceCode, dedupKey, nil, loginstats.Hint{})
 }
 
 // Revoke OAuth 2.0 Access or Refresh Token Request
@@ -1164,6 +1182,7 @@ type _ struct {
 func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	session := NewSessionWithCustomClaims(ctx, h.c, "")
+	dedupKey := attemptDedupKey(r)
 
 	accessRequest, err := h.r.OAuth2Provider().NewAccessRequest(ctx, r, session)
 	if err != nil {
@@ -1176,6 +1195,9 @@ func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 		} else {
 			events.Trace(ctx, events.TokenExchangeError, events.WithError(err))
 		}
+		h.recordLoginAttempt(r, loginstats.EntryPointToken,
+			accountFromForm(r), grantTypeFromRequest(accessRequest), dedupKey, err,
+			loginstats.Hint{})
 		return
 	}
 
@@ -1189,6 +1211,8 @@ func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 				x.LogError(r, err, h.r.Logger())
 				h.r.OAuth2Provider().WriteAccessError(ctx, w, accessRequest, err)
 				events.Trace(ctx, events.TokenExchangeError, events.WithRequest(accessRequest), events.WithError(err))
+				h.recordLoginAttempt(r, loginstats.EntryPointToken,
+					accountFromForm(r), grantTypeFromRequest(accessRequest), dedupKey, err, loginstats.Hint{})
 				return
 			}
 		}
@@ -1241,6 +1265,8 @@ func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 			x.LogError(r, err, h.r.Logger())
 			h.r.OAuth2Provider().WriteAccessError(ctx, w, accessRequest, err)
 			events.Trace(ctx, events.TokenExchangeError, events.WithRequest(accessRequest), events.WithError(err))
+			h.recordLoginAttempt(r, loginstats.EntryPointToken,
+				accountFromForm(r), grantTypeFromRequest(accessRequest), dedupKey, err, loginstats.Hint{})
 			return
 		}
 	}
@@ -1253,10 +1279,14 @@ func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 		x.LogError(r, err, h.r.Logger())
 		h.r.OAuth2Provider().WriteAccessError(ctx, w, accessRequest, err)
 		events.Trace(ctx, events.TokenExchangeError, events.WithRequest(accessRequest), events.WithError(err))
+		h.recordLoginAttempt(r, loginstats.EntryPointToken,
+			accountFromForm(r), grantTypeFromRequest(accessRequest), dedupKey, err, loginstats.Hint{})
 		return
 	}
 
 	h.r.OAuth2Provider().WriteAccessResponse(ctx, w, accessRequest, accessResponse)
+	h.recordLoginAttempt(r, loginstats.EntryPointToken,
+		accountFromRequest(accessRequest), grantTypeFromRequest(accessRequest), dedupKey, nil, loginstats.Hint{})
 }
 
 // swagger:route GET /oauth2/auth oAuth2 oAuth2Authorize
@@ -1283,19 +1313,28 @@ func (h *Handler) oauth2TokenExchange(w http.ResponseWriter, r *http.Request) {
 //	  x-ory-ratelimit-bucket: hydra-public-medium
 func (h *Handler) oAuth2Authorize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	dedupKey := attemptDedupKey(r)
 
 	authorizeRequest, err := h.r.OAuth2Provider().NewAuthorizeRequest(ctx, r)
 	if err != nil {
 		x.LogError(r, err, h.r.Logger())
+		// Record before writing: the failure may be returned as a 303/302
+		// redirect, which the HTTP metrics only see as a 3xx.
+		h.recordLoginAttempt(r, loginstats.EntryPointAuthorize,
+			"", "", dedupKey, err, loginstats.Hint{})
 		h.writeAuthorizeError(w, r, authorizeRequest, err)
 		return
 	}
 
 	fl, err := h.r.ConsentStrategy().HandleOAuth2AuthorizationRequest(ctx, w, r, authorizeRequest)
 	if errors.Is(err, consent.ErrUserRedirected) {
+		// The browser was redirected to the login/consent UI; this is a
+		// protocol hand-off, not a terminal attempt outcome.
 		return
 	} else if err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointAuthorize,
+			"", "", dedupKey, err, loginstats.Hint{})
 		h.writeAuthorizeError(w, r, authorizeRequest, err)
 		return
 	}
@@ -1303,6 +1342,8 @@ func (h *Handler) oAuth2Authorize(w http.ResponseWriter, r *http.Request) {
 	authorizeRequest.SetID(fl.ConsentRequestID.String())
 	session, err := h.updateSessionWithRequest(ctx, fl, r, authorizeRequest, nil)
 	if err != nil {
+		h.recordLoginAttempt(r, loginstats.EntryPointAuthorize,
+			fl.Subject, "", dedupKey, err, loginstats.Hint{})
 		h.writeAuthorizeError(w, r, authorizeRequest, err)
 		return
 	}
@@ -1312,11 +1353,15 @@ func (h *Handler) oAuth2Authorize(w http.ResponseWriter, r *http.Request) {
 		return err
 	}); err != nil {
 		x.LogError(r, err, h.r.Logger())
+		h.recordLoginAttempt(r, loginstats.EntryPointAuthorize,
+			fl.Subject, "", dedupKey, err, loginstats.Hint{})
 		h.writeAuthorizeError(w, r, authorizeRequest, err)
 		return
 	}
 
 	h.r.OAuth2Provider().WriteAuthorizeResponse(ctx, w, authorizeRequest, response)
+	h.recordLoginAttempt(r, loginstats.EntryPointAuthorize,
+		fl.Subject, "", dedupKey, nil, loginstats.Hint{})
 }
 
 // Delete OAuth 2.0 Access Token Parameters

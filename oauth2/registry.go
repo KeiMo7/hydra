@@ -13,6 +13,7 @@ import (
 	"github.com/ory/hydra/v2/jwk"
 	"github.com/ory/hydra/v2/oauth2/trust"
 	"github.com/ory/hydra/v2/x"
+	"github.com/ory/hydra/v2/x/loginstats"
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/logrusx"
 	"github.com/ory/x/otelx"
@@ -41,4 +42,9 @@ type Registry interface {
 	rfc8628.DeviceRateLimitStrategyProvider
 	rfc8628.DeviceCodeStrategyProvider
 	rfc8628.UserCodeStrategyProvider
+
+	// LoginAttemptRecorder returns the bounded login-attempt outcome
+	// recorder. It is a no-op recorder unless the feature is enabled, so
+	// callers can always invoke it without a feature check.
+	LoginAttemptRecorder() loginstats.Recorder
 }
