@@ -106,6 +106,33 @@ func (h *Handler) discoverJsonWebKeys(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
+
+			// Rotation-aware backends expose lifecycle metadata. Only keys
+			// explicitly recorded as tombstoned disappear from the
+			// verification set; keys without a metadata record (e.g. those
+			// written through the legacy admin API) keep the historic
+			// behavior of remaining published. This guarantees the set is
+			// never emptied by the metadata layer.
+			if rm, ok := h.r.KeyManager().(RotationManager); ok {
+				if view, viewErr := rm.GetLifecycle(ctx, set); viewErr == nil && len(view.Keys) > 0 {
+					tombstoned := map[string]struct{}{}
+					for _, m := range view.Keys {
+						if !m.IsPubliclyVisible() {
+							tombstoned[m.Kid] = struct{}{}
+						}
+					}
+					filtered := &jose.JSONWebKeySet{}
+					for idx := range k.Keys {
+						if _, hidden := tombstoned[k.Keys[idx].KeyID]; !hidden {
+							filtered.Keys = append(filtered.Keys, k.Keys[idx])
+						}
+					}
+					k = filtered
+				} else if viewErr != nil && !errors.Is(viewErr, x.ErrNotFound) && !errors.Is(viewErr, ErrRotationUnsupported) {
+					return viewErr
+				}
+			}
+
 			keys[i] = ExcludePrivateKeys(k)
 			nTotalKeys.Add(int64(len(keys[i].Keys)))
 			return nil

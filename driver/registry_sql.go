@@ -341,6 +341,7 @@ func (m *RegistrySQL) RegisterAdminRoutes(admin *httprouterx.RouterAdmin) {
 
 	consent.NewHandler(m).SetRoutes(admin)
 	jwk.NewHandler(m).SetAdminRoutes(admin)
+	jwk.NewRotationHandler(m).SetAdminRoutes(admin)
 	client.NewHandler(m).SetAdminRoutes(admin)
 	oauth2.NewHandler(m).SetAdminRoutes(admin)
 	trust.NewHandler(m).SetRoutes(admin)

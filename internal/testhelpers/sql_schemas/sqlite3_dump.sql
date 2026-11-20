@@ -1,4 +1,4 @@
--- migrations hash: 14de04dcdbd3e9b00922807be554550705bf44b836351e0eeffdac2871efff8c5cc087a08319b435d9a66cb6d9b16eed397a786833efa790956304dadc6229d8
+-- migrations hash: 9049243848108841a76a28052dcc342ae3cd9af161601ff98e192e0b380038410baa5b1a6c424e568165b6c585c260af47ca9e7a4ccd78b46d4da7682ecfc4ed
 
 CREATE TABLE "hydra_client"
 (
@@ -68,6 +68,23 @@ CREATE TABLE "hydra_jwk" (
 );
 CREATE INDEX hydra_jwk_nid_sid_created_at_idx ON hydra_jwk (nid, sid, created_at);
 CREATE INDEX hydra_jwk_nid_sid_kid_created_at_idx ON hydra_jwk (nid, sid, kid, created_at);
+CREATE TABLE hydra_jwk_rotation
+(
+    pk             CHAR(36)     NOT NULL PRIMARY KEY,
+    nid            CHAR(36)     NOT NULL,
+    sid            VARCHAR(255) NOT NULL,
+    kid            VARCHAR(255) NOT NULL,
+    state          VARCHAR(20)  NOT NULL,
+    generation     BIGINT       NOT NULL DEFAULT 1,
+    activated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retired_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    cleanup_after  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    tombstoned_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (nid) REFERENCES networks (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX hydra_jwk_rotation_nid_sid_kid_idx ON hydra_jwk_rotation (nid, sid, kid);
+CREATE INDEX hydra_jwk_rotation_nid_sid_state_idx ON hydra_jwk_rotation (nid, sid, state);
 CREATE UNIQUE INDEX hydra_jwk_sid_kid_nid_key ON hydra_jwk (sid, kid, nid);
 CREATE TABLE "hydra_oauth2_access" (
     signature          VARCHAR(255) NOT NULL PRIMARY KEY,

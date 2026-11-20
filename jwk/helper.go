@@ -39,6 +39,24 @@ func EnsureAsymmetricKeypairExists(t testing.TB, r InternalRegistry, alg, set st
 }
 
 func GetOrGenerateKeys(ctx context.Context, r InternalRegistry, set, alg string) (private *jose.JSONWebKey, err error) {
+	// The rotation-aware manager is the source of truth for which key signs.
+	// It is transactional and converges concurrent callers across instances on
+	// exactly one active key. Backends without that capability (HSM) fall back
+	// to the historic behavior below unchanged.
+	if rm, ok := r.KeyManager().(RotationManager); ok {
+		result, err := rm.EnsureSigningKey(ctx, set, alg, "sig")
+		if err == nil {
+			keys, err := r.KeyManager().GetKeySet(ctx, set)
+			if err != nil {
+				return nil, err
+			}
+			return signingKey(result.View.Keys, keys)
+		}
+		if !errors.Is(err, ErrRotationUnsupported) {
+			return nil, err
+		}
+	}
+
 	keys, err := r.KeyManager().GetKeySet(ctx, set)
 	if err == nil {
 		if privKey, findErr := FindPrivateKey(keys); findErr == nil {
