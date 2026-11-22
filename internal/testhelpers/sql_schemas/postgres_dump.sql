@@ -1,4 +1,4 @@
--- migrations hash: 14de04dcdbd3e9b00922807be554550705bf44b836351e0eeffdac2871efff8c5cc087a08319b435d9a66cb6d9b16eed397a786833efa790956304dadc6229d8
+-- migrations hash: beb0d1e4dbac545ee13dd5352a33a173cdecfb5ebe5cfd7fa8d7c2bf1685f0606cfe3b122140110b4004dd0bb75c417907cd0efa8956418e81d0b240c51a4ec9
 
 
 
@@ -608,3 +608,40 @@ ALTER TABLE ONLY public.hydra_oauth2_trusted_jwt_bearer_issuer
     ADD CONSTRAINT hydra_oauth2_trusted_jwt_bearer_issuer_nid_fk_idx FOREIGN KEY (nid) REFERENCES public.networks(id) ON UPDATE RESTRICT ON DELETE CASCADE;
 
 SET search_path TO public;
+
+CREATE TABLE public.hydra_client_lockout (
+    client_id character varying(255) NOT NULL,
+    source_hash character varying(64) DEFAULT ''::character varying NOT NULL,
+    failure_count integer DEFAULT 0 NOT NULL,
+    window_started_at timestamp without time zone NOT NULL,
+    locked_until timestamp without time zone,
+    lockout_round integer DEFAULT 0 NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    updated_at timestamp without time zone DEFAULT now() NOT NULL,
+    nid uuid NOT NULL
+);
+
+CREATE TABLE public.hydra_client_lockout_audit (
+    id character varying(36) NOT NULL,
+    nid uuid NOT NULL,
+    client_id character varying(255) NOT NULL,
+    action character varying(32) NOT NULL,
+    actor character varying(255) DEFAULT ''::character varying NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.hydra_client_lockout
+    ADD CONSTRAINT hydra_client_lockout_pkey PRIMARY KEY (nid, client_id, source_hash);
+
+ALTER TABLE ONLY public.hydra_client_lockout_audit
+    ADD CONSTRAINT hydra_client_lockout_audit_pkey PRIMARY KEY (id, nid);
+
+CREATE INDEX hydra_client_lockout_client_id_idx ON public.hydra_client_lockout USING btree (nid, client_id);
+
+CREATE INDEX hydra_client_lockout_audit_client_id_idx ON public.hydra_client_lockout_audit USING btree (nid, client_id);
+
+ALTER TABLE ONLY public.hydra_client_lockout
+    ADD CONSTRAINT hydra_client_lockout_nid_fkey FOREIGN KEY (nid) REFERENCES public.networks(id) ON UPDATE RESTRICT ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.hydra_client_lockout_audit
+    ADD CONSTRAINT hydra_client_lockout_audit_nid_fkey FOREIGN KEY (nid) REFERENCES public.networks(id) ON UPDATE RESTRICT ON DELETE CASCADE;

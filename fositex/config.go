@@ -32,6 +32,7 @@ type (
 		persistence.Provider
 		httpx.ClientProvider
 		ClientHasher() fosite.Hasher
+		ClientLockoutTracker(ctx context.Context) fosite.ClientCredentialsLockoutTracker
 		ExtraFositeFactories() []Factory
 	}
 	Factory func(config fosite.Configurator, storage fosite.Storage, strategy interface{}) interface{}
@@ -176,6 +177,13 @@ func (c *Config) GetMinParameterEntropy(_ context.Context) int {
 func (c *Config) GetClientAuthenticationStrategy(context.Context) fosite.ClientAuthenticationStrategy {
 	// Fosite falls back to the default fosite.Fosite.DefaultClientAuthenticationStrategy when this is nil.
 	return nil
+}
+
+// GetClientCredentialsLockoutTracker implements
+// fosite.ClientCredentialsLockoutTrackerProvider and enables failure counting
+// and lockout for client credential verification.
+func (c *Config) GetClientCredentialsLockoutTracker(ctx context.Context) fosite.ClientCredentialsLockoutTracker {
+	return c.deps.ClientLockoutTracker(ctx)
 }
 
 func (c *Config) GetResponseModeHandlerExtension(context.Context) fosite.ResponseModeHandler {

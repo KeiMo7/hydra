@@ -223,8 +223,28 @@ func (f *Fosite) DefaultClientAuthenticationStrategy(ctx context.Context, r *htt
 	}
 	span.SetAttributes(attribute.String("client.id", clientID))
 
+	// The lockout check runs before any credential verification (in
+	// particular before the expensive secret hash comparison) and also covers
+	// client identifiers that are not registered at all.
+	var tracker ClientCredentialsLockoutTracker
+	if clientID != "" {
+		if t := f.clientCredentialsLockoutTracker(ctx); t != nil {
+			tracker = t
+			if err := t.CheckLockout(ctx, clientID, r); err != nil {
+				span.SetAttributes(attribute.Bool("client.locked_out", true))
+				return nil, err
+			}
+		}
+	}
+
 	client, err := f.Store.FositeClientManager().GetClient(ctx, clientID)
 	if err != nil {
+		// Unknown client identifiers are counted exactly like a wrong client
+		// secret so that the counters can not be used to probe which client
+		// identifiers exist.
+		if tracker != nil {
+			tracker.RecordFailure(ctx, clientID, r)
+		}
 		return nil, errorsx.WithStack(ErrInvalidClient.WithWrap(err).WithDebug(err.Error()))
 	}
 
@@ -249,7 +269,14 @@ func (f *Fosite) DefaultClientAuthenticationStrategy(ctx context.Context, r *htt
 
 	// Enforce client authentication
 	if err := f.checkClientSecret(ctx, client, []byte(clientSecret)); err != nil {
+		if tracker != nil {
+			tracker.RecordFailure(ctx, clientID, r)
+		}
 		return nil, errorsx.WithStack(ErrInvalidClient.WithWrap(err).WithDebug(err.Error()))
+	}
+
+	if tracker != nil {
+		tracker.RecordSuccess(ctx, clientID, r)
 	}
 
 	return client, nil

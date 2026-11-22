@@ -849,6 +849,99 @@
             }
           }
         },
+        "client_credentials_lockout": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Protects against client credential brute-force attacks by counting failed OAuth 2.0 client authentication attempts and temporarily locking out client identifiers with exponential backoff. The state is stored in the shared database, is shared across all instances, and survives restarts.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable counting of failed OAuth 2.0 client authentication attempts and lockout of client identifiers that exceed the threshold. When disabled, client authentication behaves exactly as if the mechanism did not exist."
+            },
+            "threshold": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10,
+              "description": "Number of failed client authentication attempts within the configured window after which the client identifier is locked out.",
+              "examples": [
+                5,
+                10,
+                20
+              ]
+            },
+            "window": {
+              "type": "string",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/duration"
+                }
+              ],
+              "default": "10m",
+              "description": "Sliding time window in which failed client authentication attempts are counted.",
+              "examples": [
+                "5m",
+                "10m",
+                "1h"
+              ]
+            },
+            "lockout_duration": {
+              "type": "string",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/duration"
+                }
+              ],
+              "default": "5m",
+              "description": "Duration of the first lockout. Consecutive lockout episodes multiply this duration by the backoff multiplier.",
+              "examples": [
+                "1m",
+                "5m",
+                "15m"
+              ]
+            },
+            "backoff_multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "default": 2,
+              "description": "Multiplier applied to the lockout duration for every consecutive lockout episode of the same client identifier.",
+              "examples": [
+                1,
+                2,
+                4
+              ]
+            },
+            "max_lockout_duration": {
+              "type": "string",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/duration"
+                }
+              ],
+              "default": "1h",
+              "description": "Upper bound for the lockout duration. The backoff never exceeds this value, and stored lockouts are clamped to it to recover from clock anomalies.",
+              "examples": [
+                "30m",
+                "1h",
+                "24h"
+              ]
+            },
+            "count_by": {
+              "type": "string",
+              "enum": [
+                "client",
+                "client_and_source"
+              ],
+              "default": "client",
+              "description": "Counting granularity. 'client' merges failures of one client identifier across all sources (default). 'client_and_source' counts failures per client identifier and source IP pair."
+            },
+            "allow_on_store_error": {
+              "type": "boolean",
+              "default": false,
+              "description": "Explicit degradation switch. When false (default), requests are rejected (fail closed) while the lockout state store is unavailable. When true, requests are let through (fail open) while the store is unavailable."
+            }
+          }
+        },
         "grant": {
           "type": "object",
           "additionalProperties": false,

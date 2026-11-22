@@ -34,6 +34,9 @@ func (s *stubConfigDeps) HTTPClient(context.Context, ...httpx.ResilientOptions) 
 }
 func (s *stubConfigDeps) ClientHasher() fosite.Hasher     { return nil }
 func (s *stubConfigDeps) ExtraFositeFactories() []Factory { return nil }
+func (s *stubConfigDeps) ClientLockoutTracker(context.Context) fosite.ClientCredentialsLockoutTracker {
+	return nil
+}
 
 func newTestConfig(t *testing.T, opts ...configx.OptionModifier) *config.DefaultProvider {
 	t.Helper()

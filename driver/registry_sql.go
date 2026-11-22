@@ -38,6 +38,7 @@ import (
 	"github.com/ory/hydra/v2/internal/kratos"
 	"github.com/ory/hydra/v2/jwk"
 	"github.com/ory/hydra/v2/oauth2"
+	"github.com/ory/hydra/v2/oauth2/lockout"
 	"github.com/ory/hydra/v2/oauth2/trust"
 	"github.com/ory/hydra/v2/persistence"
 	"github.com/ory/hydra/v2/persistence/sql"
@@ -88,6 +89,7 @@ type RegistrySQL struct {
 	enigmaHMAC                  *hmac.HMACStrategy
 	deviceHmac                  *rfc8628.DefaultDeviceStrategy
 	fc                          *fositex.Config
+	clt                         *lockout.Tracker
 	publicCORS                  *cors.Cors
 	kratos                      kratos.Client
 	fositeFactories             []fositex.Factory
@@ -561,6 +563,20 @@ func (m *RegistrySQL) OAuth2Config() *fositex.Config {
 		m.fc = fositex.NewConfig(m)
 	}
 	return m.fc
+}
+
+// ClientLockoutManager returns the shared client credentials lockout tracker.
+func (m *RegistrySQL) ClientLockoutManager() *lockout.Tracker {
+	if m.clt == nil {
+		m.clt = lockout.NewTracker(m.Persister(), m.conf.ClientCredentialsLockoutConfig, m.Logger())
+	}
+	return m.clt
+}
+
+// ClientLockoutTracker wires the lockout tracker into the fosite client
+// authentication flow.
+func (m *RegistrySQL) ClientLockoutTracker(ctx context.Context) fosite.ClientCredentialsLockoutTracker {
+	return m.ClientLockoutManager()
 }
 
 func (m *RegistrySQL) ExtraFositeFactories() []fositex.Factory {

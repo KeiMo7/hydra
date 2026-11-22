@@ -10,6 +10,7 @@ import (
 	"github.com/ory/hydra/v2/fosite/handler/rfc8628"
 	enigma "github.com/ory/hydra/v2/fosite/token/hmac"
 	"github.com/ory/hydra/v2/jwk"
+	"github.com/ory/hydra/v2/oauth2/lockout"
 	"github.com/ory/x/httpx"
 )
 
@@ -22,6 +23,7 @@ type Registry interface {
 	ClientValidator() *Validator
 	ClientManager() Manager
 	ClientHasher() fosite.Hasher
+	ClientLockoutManager() *lockout.Tracker
 	OpenIDJWTSigner() jwk.JWTSigner
 	OAuth2HMACStrategy() foauth2.CoreStrategy
 	OAuth2EnigmaStrategy() *enigma.HMACStrategy

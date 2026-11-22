@@ -59,6 +59,14 @@ const (
 
 	// IdentityTokenIssued will be emitted when a refresh token is issued.
 	IdentityTokenIssued semconv.Event = "OIDCIdentityTokenIssued" //nolint:gosec
+
+	// ClientLockoutTriggered will be emitted when a client is locked out
+	// after too many failed authentication attempts.
+	ClientLockoutTriggered semconv.Event = "OAuth2ClientLockoutTriggered"
+
+	// ClientLockoutReleased will be emitted when an operator manually clears
+	// a client lockout.
+	ClientLockoutReleased semconv.Event = "OAuth2ClientLockoutReleased"
 )
 
 const (

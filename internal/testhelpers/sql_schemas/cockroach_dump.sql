@@ -1,4 +1,4 @@
--- migrations hash: 14de04dcdbd3e9b00922807be554550705bf44b836351e0eeffdac2871efff8c5cc087a08319b435d9a66cb6d9b16eed397a786833efa790956304dadc6229d8
+-- migrations hash: beb0d1e4dbac545ee13dd5352a33a173cdecfb5ebe5cfd7fa8d7c2bf1685f0606cfe3b122140110b4004dd0bb75c417907cd0efa8956418e81d0b240c51a4ec9
 
 CREATE TABLE public.schema_migration (
 	version VARCHAR(48) NOT NULL,
@@ -404,3 +404,34 @@ ALTER TABLE public.hydra_oauth2_device_auth_codes VALIDATE CONSTRAINT hydra_oaut
 ALTER TABLE public.hydra_oauth2_device_auth_codes VALIDATE CONSTRAINT hydra_oauth2_device_auth_codes_nid_fkey;
 ALTER TABLE public.hydra_oauth2_device_auth_codes VALIDATE CONSTRAINT hydra_oauth2_device_auth_codes_challenge_id_fkey;
 
+
+CREATE TABLE public.hydra_client_lockout (
+	client_id VARCHAR(255) NOT NULL,
+	source_hash VARCHAR(64) NOT NULL DEFAULT '':::STRING,
+	failure_count INT NOT NULL DEFAULT 0,
+	window_started_at TIMESTAMP NOT NULL,
+	locked_until TIMESTAMP NULL,
+	lockout_round INT NOT NULL DEFAULT 0,
+	created_at TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	updated_at TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	nid UUID NOT NULL,
+	CONSTRAINT hydra_client_lockout_pkey PRIMARY KEY (nid, client_id, source_hash)
+);
+
+CREATE TABLE public.hydra_client_lockout_audit (
+	id VARCHAR(36) NOT NULL,
+	nid UUID NOT NULL,
+	client_id VARCHAR(255) NOT NULL,
+	action VARCHAR(32) NOT NULL,
+	actor VARCHAR(255) NOT NULL DEFAULT '':::STRING,
+	created_at TIMESTAMP NOT NULL DEFAULT now():::TIMESTAMP,
+	CONSTRAINT hydra_client_lockout_audit_pkey PRIMARY KEY (id, nid)
+);
+
+CREATE INDEX hydra_client_lockout_client_id_idx ON public.hydra_client_lockout (nid, client_id);
+
+CREATE INDEX hydra_client_lockout_audit_client_id_idx ON public.hydra_client_lockout_audit (nid, client_id);
+
+ALTER TABLE public.hydra_client_lockout ADD CONSTRAINT hydra_client_lockout_nid_fkey FOREIGN KEY (nid) REFERENCES public.networks(id) ON UPDATE RESTRICT ON DELETE CASCADE;
+
+ALTER TABLE public.hydra_client_lockout_audit ADD CONSTRAINT hydra_client_lockout_audit_nid_fkey FOREIGN KEY (nid) REFERENCES public.networks(id) ON UPDATE RESTRICT ON DELETE CASCADE;

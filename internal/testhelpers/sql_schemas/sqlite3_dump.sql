@@ -1,4 +1,4 @@
--- migrations hash: 14de04dcdbd3e9b00922807be554550705bf44b836351e0eeffdac2871efff8c5cc087a08319b435d9a66cb6d9b16eed397a786833efa790956304dadc6229d8
+-- migrations hash: beb0d1e4dbac545ee13dd5352a33a173cdecfb5ebe5cfd7fa8d7c2bf1685f0606cfe3b122140110b4004dd0bb75c417907cd0efa8956418e81d0b240c51a4ec9
 
 CREATE TABLE "hydra_client"
 (
@@ -55,6 +55,35 @@ CREATE TABLE "hydra_client"
   nid                                             CHAR(36)     NOT NULL, skip_logout_consent BOOLEAN NULL, device_authorization_grant_id_token_lifespan BIGINT NULL DEFAULT NULL, device_authorization_grant_access_token_lifespan BIGINT NULL DEFAULT NULL, device_authorization_grant_refresh_token_lifespan BIGINT NULL DEFAULT NULL, rotated_secrets JSONB NULL,
   PRIMARY KEY (id, nid)
 );
+CREATE TABLE hydra_client_lockout
+(
+  client_id         VARCHAR(255) NOT NULL,
+  source_hash       VARCHAR(64)  NOT NULL DEFAULT '',
+  failure_count     INT          NOT NULL DEFAULT 0,
+  window_started_at TIMESTAMP    NOT NULL,
+  locked_until      TIMESTAMP    NULL,
+  lockout_round     INT          NOT NULL DEFAULT 0,
+  created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  nid               UUID         NOT NULL,
+
+  FOREIGN KEY (nid) REFERENCES networks (id) ON UPDATE RESTRICT ON DELETE CASCADE,
+  PRIMARY KEY (nid, client_id, source_hash)
+);
+CREATE TABLE hydra_client_lockout_audit
+(
+  id         VARCHAR(36)  NOT NULL,
+  nid        UUID         NOT NULL,
+  client_id  VARCHAR(255) NOT NULL,
+  action     VARCHAR(32)  NOT NULL,
+  actor      VARCHAR(255) NOT NULL DEFAULT '',
+  created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (nid) REFERENCES networks (id) ON UPDATE RESTRICT ON DELETE CASCADE,
+  PRIMARY KEY (id, nid)
+);
+CREATE INDEX hydra_client_lockout_audit_client_id_idx ON hydra_client_lockout_audit (nid, client_id);
+CREATE INDEX hydra_client_lockout_client_id_idx ON hydra_client_lockout (nid, client_id);
 CREATE TABLE "hydra_jwk" (
     sid             VARCHAR(255) NOT NULL,
     kid             VARCHAR(255) NOT NULL,

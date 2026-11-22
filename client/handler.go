@@ -50,6 +50,8 @@ func (h *Handler) SetAdminRoutes(r *httprouterx.RouterAdmin) {
 	r.PUT(ClientsHandlerPath+"/{id}/lifespans", h.setOAuth2ClientLifespans)
 	r.POST(ClientsHandlerPath+"/{id}/secrets/rotate", h.rotateOAuth2ClientSecret)
 	r.DELETE(ClientsHandlerPath+"/{id}/secrets/rotate", h.deleteRotatedOAuth2ClientSecrets)
+	r.GET(ClientsHandlerPath+"/{id}/lockout", h.getOAuth2ClientLockout)
+	r.DELETE(ClientsHandlerPath+"/{id}/lockout", h.deleteOAuth2ClientLockout)
 }
 
 func (h *Handler) SetPublicRoutes(r *httprouterx.RouterPublic) {

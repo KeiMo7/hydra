@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/ory/hydra/v2/oauth2/lockout"
 	"github.com/ory/hydra/v2/spec"
 	"github.com/ory/hydra/v2/x"
 	"github.com/ory/x/configx"
@@ -123,6 +124,14 @@ const (
 	KeyTokenHook                                 = "oauth2.token_hook"         // #nosec G101
 	KeyDevelopmentMode                           = "dev"
 	KeyFeatureFlagsLegacyAllowInsecureOrigins    = "feature_flags.legacy_allow_insecure_origins"
+	KeyClientLockoutEnabled                      = "oauth2.client_credentials_lockout.enabled"
+	KeyClientLockoutThreshold                    = "oauth2.client_credentials_lockout.threshold"
+	KeyClientLockoutWindow                       = "oauth2.client_credentials_lockout.window"
+	KeyClientLockoutDuration                     = "oauth2.client_credentials_lockout.lockout_duration"
+	KeyClientLockoutBackoffMultiplier            = "oauth2.client_credentials_lockout.backoff_multiplier"
+	KeyClientLockoutMaxDuration                  = "oauth2.client_credentials_lockout.max_lockout_duration"
+	KeyClientLockoutCountBy                      = "oauth2.client_credentials_lockout.count_by"
+	KeyClientLockoutAllowOnStoreError            = "oauth2.client_credentials_lockout.allow_on_store_error"
 )
 
 const DSNMemory = "memory"
@@ -822,4 +831,50 @@ func (p *DefaultProvider) GetPaginationEncryptionKeys(ctx context.Context) [][32
 // the Ory Network for grandfathered projects. Default false.
 func (p *DefaultProvider) LegacyAllowInsecureOrigins(ctx context.Context) bool {
 	return p.getProvider(ctx).Bool(KeyFeatureFlagsLegacyAllowInsecureOrigins)
+}
+
+// Client lockout defaults. They are mirrored in spec/config.json; the code
+// defaults apply when the schema defaults were not materialized (e.g. tests
+// setting values directly).
+const (
+	defaultClientLockoutThreshold         = 10
+	defaultClientLockoutWindow            = 10 * time.Minute
+	defaultClientLockoutDuration          = 5 * time.Minute
+	defaultClientLockoutBackoffMultiplier = 2.0
+	defaultClientLockoutMaxDuration       = time.Hour
+)
+
+// ClientCredentialsLockoutConfig returns the client credentials failure
+// counting and lockout configuration.
+func (p *DefaultProvider) ClientCredentialsLockoutConfig(ctx context.Context) lockout.Config {
+	q := p.getProvider(ctx)
+	cfg := lockout.Config{
+		Enabled:           q.BoolF(KeyClientLockoutEnabled, true),
+		Threshold:         int64(q.IntF(KeyClientLockoutThreshold, defaultClientLockoutThreshold)),
+		Window:            q.DurationF(KeyClientLockoutWindow, defaultClientLockoutWindow),
+		BaseDuration:      q.DurationF(KeyClientLockoutDuration, defaultClientLockoutDuration),
+		BackoffMultiplier: q.Float64F(KeyClientLockoutBackoffMultiplier, defaultClientLockoutBackoffMultiplier),
+		MaxDuration:       q.DurationF(KeyClientLockoutMaxDuration, defaultClientLockoutMaxDuration),
+		CountBy:           q.StringF(KeyClientLockoutCountBy, lockout.CountByClient),
+		AllowOnStoreError: q.BoolF(KeyClientLockoutAllowOnStoreError, false),
+	}
+	if cfg.Threshold < 1 {
+		cfg.Threshold = defaultClientLockoutThreshold
+	}
+	if cfg.Window <= 0 {
+		cfg.Window = defaultClientLockoutWindow
+	}
+	if cfg.BaseDuration <= 0 {
+		cfg.BaseDuration = defaultClientLockoutDuration
+	}
+	if cfg.BackoffMultiplier < 1 {
+		cfg.BackoffMultiplier = defaultClientLockoutBackoffMultiplier
+	}
+	if cfg.MaxDuration < cfg.BaseDuration {
+		cfg.MaxDuration = cfg.BaseDuration
+	}
+	if cfg.CountBy != lockout.CountByClientAndSource {
+		cfg.CountBy = lockout.CountByClient
+	}
+	return cfg
 }

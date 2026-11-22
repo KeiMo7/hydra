@@ -1,4 +1,4 @@
--- migrations hash: 14de04dcdbd3e9b00922807be554550705bf44b836351e0eeffdac2871efff8c5cc087a08319b435d9a66cb6d9b16eed397a786833efa790956304dadc6229d8
+-- migrations hash: beb0d1e4dbac545ee13dd5352a33a173cdecfb5ebe5cfd7fa8d7c2bf1685f0606cfe3b122140110b4004dd0bb75c417907cd0efa8956418e81d0b240c51a4ec9
 
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -487,3 +487,30 @@ CREATE TABLE `schema_migration` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+
+CREATE TABLE `hydra_client_lockout` (
+  `client_id` varchar(255) NOT NULL,
+  `source_hash` varchar(64) NOT NULL DEFAULT '',
+  `failure_count` int NOT NULL DEFAULT 0,
+  `window_started_at` timestamp NOT NULL,
+  `locked_until` timestamp NULL DEFAULT NULL,
+  `lockout_round` int NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `nid` char(36) NOT NULL,
+  PRIMARY KEY (`nid`,`client_id`,`source_hash`),
+  KEY `hydra_client_lockout_client_id_idx` (`nid`,`client_id`),
+  CONSTRAINT `hydra_client_lockout_nid_fkey` FOREIGN KEY (`nid`) REFERENCES `networks` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE
+);
+
+CREATE TABLE `hydra_client_lockout_audit` (
+  `id` varchar(36) NOT NULL,
+  `nid` char(36) NOT NULL,
+  `client_id` varchar(255) NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `actor` varchar(255) NOT NULL DEFAULT '',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`,`nid`),
+  KEY `hydra_client_lockout_audit_client_id_idx` (`nid`,`client_id`),
+  CONSTRAINT `hydra_client_lockout_audit_nid_fkey` FOREIGN KEY (`nid`) REFERENCES `networks` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE
+);

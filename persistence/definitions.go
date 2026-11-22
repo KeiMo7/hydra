@@ -8,6 +8,7 @@ import (
 
 	"github.com/ory/hydra/v2/client"
 	"github.com/ory/hydra/v2/consent"
+	"github.com/ory/hydra/v2/oauth2/lockout"
 	"github.com/ory/hydra/v2/oauth2/trust"
 	"github.com/ory/hydra/v2/x"
 	"github.com/ory/pop/v6"
@@ -22,6 +23,7 @@ type (
 		client.Manager
 		x.FositeStorer
 		trust.GrantManager
+		lockout.Store
 
 		Connection(context.Context) *pop.Connection
 		Transaction(context.Context, func(ctx context.Context, c *pop.Connection) error) error
