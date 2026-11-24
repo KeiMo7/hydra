@@ -529,7 +529,7 @@ func (h *Handler) discoverOidcConfiguration(w http.ResponseWriter, r *http.Reque
 		ClaimsSupported:                        h.c.OIDCDiscoverySupportedClaims(ctx),
 		ScopesSupported:                        h.c.OIDCDiscoverySupportedScope(ctx),
 		UserinfoEndpoint:                       h.c.OIDCDiscoveryUserinfoEndpoint(ctx).String(),
-		TokenEndpointAuthMethodsSupported:      []string{"client_secret_post", "client_secret_basic", "private_key_jwt", "none"},
+		TokenEndpointAuthMethodsSupported:      h.r.ClientAuthRegistry().Snapshot(ctx).DiscoveryIDs(),
 		IDTokenSigningAlgValuesSupported:       []string{key.Algorithm},
 		IDTokenSignedResponseAlg:               []string{key.Algorithm},
 		UserinfoSignedResponseAlg:              []string{key.Algorithm},

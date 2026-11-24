@@ -48,6 +48,9 @@ const (
 	// TokenExchangeError will be emitted by requests to POST /oauth2/token in case the request was unsuccessful.
 	TokenExchangeError semconv.Event = "OAuth2TokenExchangeError" //nolint:gosec
 
+	// ClientAuthentication is emitted once for every client authentication attempt.
+	ClientAuthentication semconv.Event = "OAuth2ClientAuthentication" //nolint:gosec
+
 	// AccessTokenInspected will be emitted by requests to POST /admin/oauth2/introspect.
 	AccessTokenInspected semconv.Event = "OAuth2AccessTokenInspected" //nolint:gosec
 
@@ -70,6 +73,9 @@ const (
 	attributeKeyOAuth2TokenFormat           = "OAuth2TokenFormat"           //nolint:gosec
 	attributeKeyOAuth2RefreshTokenSignature = "OAuth2RefreshTokenSignature" //nolint:gosec
 	attributeKeyOAuth2AccessTokenSignature  = "OAuth2AccessTokenSignature"  //nolint:gosec
+	attributeKeyClientAuthMethod            = "OAuth2ClientAuthMethod"
+	attributeKeyClientAuthResult            = "OAuth2ClientAuthResult"
+	attributeKeyClientAuthFailureCategory   = "OAuth2ClientAuthFailureCategory"
 	attributeKeyErrorReason                 = "ErrorReason"
 )
 
@@ -85,6 +91,18 @@ func WithGrantType(grantType string) trace.EventOption {
 
 func ClientID(clientID string) otelattr.KeyValue {
 	return otelattr.String(attributeKeyOAuth2ClientID, clientID)
+}
+
+func ClientAuthMethod(method string) otelattr.KeyValue {
+	return otelattr.String(attributeKeyClientAuthMethod, method)
+}
+
+func ClientAuthResult(success bool) otelattr.KeyValue {
+	return otelattr.Bool(attributeKeyClientAuthResult, success)
+}
+
+func ClientAuthFailureCategory(category string) otelattr.KeyValue {
+	return otelattr.String(attributeKeyClientAuthFailureCategory, category)
 }
 
 func RefreshTokenSignature(signature string) otelattr.KeyValue {

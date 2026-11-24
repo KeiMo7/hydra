@@ -4,6 +4,7 @@
 package client
 
 import (
+	"github.com/ory/hydra/v2/clientauth"
 	"github.com/ory/hydra/v2/driver/config"
 	"github.com/ory/hydra/v2/fosite"
 	foauth2 "github.com/ory/hydra/v2/fosite/handler/oauth2"
@@ -21,6 +22,7 @@ type InternalRegistry interface {
 type Registry interface {
 	ClientValidator() *Validator
 	ClientManager() Manager
+	ClientAuthRegistry() *clientauth.Registry
 	ClientHasher() fosite.Hasher
 	OpenIDJWTSigner() jwk.JWTSigner
 	OAuth2HMACStrategy() foauth2.CoreStrategy

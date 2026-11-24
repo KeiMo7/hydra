@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -912,7 +911,8 @@ func (h *Handler) rotateOAuth2ClientSecret(w http.ResponseWriter, r *http.Reques
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
-	if authMethod := c.GetTokenEndpointAuthMethod(); !slices.Contains([]string{"client_secret_basic", "client_secret_post"}, authMethod) {
+	authMethod := c.GetTokenEndpointAuthMethod()
+	if !h.r.ClientAuthRegistry().Snapshot(r.Context()).RotationEligible(authMethod) {
 		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest().WithReasonf("The client is configured to use the %q authentication method, which does not support client secret rotation.", authMethod))
 		return
 	}
@@ -977,7 +977,8 @@ func (h *Handler) deleteRotatedOAuth2ClientSecrets(w http.ResponseWriter, r *htt
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
-	if authMethod := c.GetTokenEndpointAuthMethod(); !slices.Contains([]string{"client_secret_basic", "client_secret_post"}, authMethod) {
+	authMethod := c.GetTokenEndpointAuthMethod()
+	if !h.r.ClientAuthRegistry().Snapshot(r.Context()).RotationEligible(authMethod) {
 		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest().WithReasonf("The client is configured to use the %q authentication method, which does not support client secret rotation.", authMethod))
 		return
 	}

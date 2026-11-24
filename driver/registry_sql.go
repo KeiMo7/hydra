@@ -22,6 +22,7 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/hydra/v2/aead"
 	"github.com/ory/hydra/v2/client"
+	"github.com/ory/hydra/v2/clientauth"
 	"github.com/ory/hydra/v2/consent"
 	"github.com/ory/hydra/v2/driver/config"
 	"github.com/ory/hydra/v2/fosite"
@@ -62,6 +63,7 @@ type RegistrySQL struct {
 	conf                        *config.DefaultProvider
 	fh                          fosite.Hasher
 	cv                          *client.Validator
+	authMethods                 *clientauth.Registry
 	ctxer                       contextx.Contextualizer
 	hh                          *healthx.Handler
 	kc                          *aead.AESGCM
@@ -376,6 +378,29 @@ func (m *RegistrySQL) ClientValidator() *client.Validator {
 	return m.cv
 }
 
+// ClientAuthRegistry returns the single registry and effective-set source for
+// OAuth 2.0 client authentication methods. External code and tests may
+// register additional methods on the returned registry before serving.
+func (m *RegistrySQL) ClientAuthRegistry() *clientauth.Registry {
+	if m.authMethods == nil {
+		m.authMethods = clientauth.NewRegistry(
+			clientauth.WithLogger(m.Logger()),
+			clientauth.WithConfigSource(func(ctx context.Context) ([]string, bool, error) {
+				ids, explicit := m.Config().ClientAuthenticationEnabledMethods(ctx)
+				return ids, explicit, nil
+			}),
+			clientauth.WithClientLookup(clientauth.ClientLookupFunc(func(ctx context.Context, id string) (fosite.Client, error) {
+				return m.FositeClientManager().GetClient(ctx, id)
+			})),
+		)
+		if err := clientauth.RegisterBuiltins(m.authMethods); err != nil {
+			// The built-in identifiers are fixed and cannot duplicate.
+			panic(err)
+		}
+	}
+	return m.authMethods
+}
+
 func (m *RegistrySQL) HealthHandler() *healthx.Handler {
 	if m.hh == nil {
 		m.hh = healthx.NewHandler(m.Writer(), config.Version, healthx.ReadyCheckers{
@@ -483,7 +508,9 @@ func (m *RegistrySQL) HTTPClient(_ context.Context, opts ...httpx.ResilientOptio
 
 func (m *RegistrySQL) OAuth2Provider() fosite.OAuth2Provider {
 	if m.fop == nil {
-		m.fop = fosite.NewOAuth2Provider(m, m.OAuth2ProviderConfig())
+		f := fosite.NewOAuth2Provider(m, m.OAuth2ProviderConfig())
+		m.ClientAuthRegistry().SetLegacyAuthenticator(f.DefaultClientAuthenticationStrategy)
+		m.fop = f
 	}
 	return m.fop
 }

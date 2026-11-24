@@ -18,6 +18,7 @@ import (
 	"github.com/ory/x/httpx"
 
 	"github.com/ory/herodot"
+	"github.com/ory/hydra/v2/clientauth"
 	"github.com/ory/hydra/v2/driver/config"
 	"github.com/ory/x/ipx"
 )
@@ -52,12 +53,36 @@ func NewValidator(r validatorRegistry) *Validator {
 }
 
 func (v *Validator) Validate(ctx context.Context, c *Client) error {
+	var authRegistry *clientauth.Registry
+	if provider, ok := v.r.(interface{ ClientAuthRegistry() *clientauth.Registry }); ok {
+		authRegistry = provider.ClientAuthRegistry()
+	} else {
+		// Backwards-compatible fallback for lightweight validator test doubles.
+		authRegistry = clientauth.BuiltinFallbackRegistry()
+	}
+	snapshot := authRegistry.Snapshot(ctx)
+	ctx = clientauth.WithSnapshot(ctx, snapshot)
+
 	if c.TokenEndpointAuthMethod == "" {
-		c.TokenEndpointAuthMethod = "client_secret_basic"
-	} else if c.TokenEndpointAuthMethod == "private_key_jwt" {
-		if len(c.JSONWebKeysURI) == 0 && c.GetJSONWebKeys() == nil {
+		c.TokenEndpointAuthMethod = clientauth.MethodClientSecretBasic
+	}
+
+	err := authRegistry.ValidateRegistration(ctx, clientauth.RegistrationMaterials{
+		Method:     c.TokenEndpointAuthMethod,
+		HasSecret:  c.Secret != "",
+		HasJWKS:    c.JSONWebKeys != nil,
+		HasJWKSURI: len(c.JSONWebKeysURI) > 0,
+		Raw:        c,
+	})
+	if err != nil {
+		var registrationErr *clientauth.RegistrationError
+		if errors.As(err, &registrationErr) && registrationErr.Field == "jwks|jwks_uri" && c.TokenEndpointAuthMethod == clientauth.MethodPrivateKeyJWT {
 			return errors.WithStack(ErrInvalidClientMetadata.WithHint("When token_endpoint_auth_method is 'private_key_jwt', either jwks or jwks_uri must be set."))
 		}
+		return errors.WithStack(ErrInvalidClientMetadata.WithHint(err.Error()))
+	}
+
+	if c.TokenEndpointAuthMethod == clientauth.MethodPrivateKeyJWT {
 		if c.TokenEndpointAuthSigningAlgorithm != "" && !isSupportedAuthTokenSigningAlg(c.TokenEndpointAuthSigningAlgorithm) {
 			return errors.WithStack(ErrInvalidClientMetadata.WithHint("Only RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 and ES512 are supported as algorithms for private key authentication."))
 		}

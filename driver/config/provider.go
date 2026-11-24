@@ -119,6 +119,7 @@ const (
 	KeyOAuth2GrantJWTIssuedDateOptional          = "oauth2.grant.jwt.iat_optional"
 	KeyOAuth2GrantJWTMaxDuration                 = "oauth2.grant.jwt.max_ttl"
 	KeyOAuth2GrantJWTOmitAssertionAudience       = "oauth2.grant.jwt.omit_assertion_audience"
+	KeyOAuth2ClientAuthenticationEnabledMethods  = "oauth2.client_authentication.enabled_methods"
 	KeyRefreshTokenHook                          = "oauth2.refresh_token_hook" // #nosec G101
 	KeyTokenHook                                 = "oauth2.token_hook"         // #nosec G101
 	KeyDevelopmentMode                           = "dev"
@@ -251,6 +252,18 @@ func (p *DefaultProvider) ClientHTTPPrivateIPExceptionURLs() []string {
 
 func (p *DefaultProvider) AllowedTopLevelClaims(ctx context.Context) []string {
 	return stringslice.Unique(p.getProvider(ctx).Strings(KeyAllowedTopLevelClaims))
+}
+
+// ClientAuthenticationEnabledMethods returns the configured effective client
+// authentication method allow-list. The boolean is false when the key is
+// absent; in that case every registered method is effective. An explicit empty
+// slice is significant and disables all methods.
+func (p *DefaultProvider) ClientAuthenticationEnabledMethods(ctx context.Context) ([]string, bool) {
+	provider := p.getProvider(ctx)
+	if !provider.Exists(KeyOAuth2ClientAuthenticationEnabledMethods) {
+		return nil, false
+	}
+	return provider.Strings(KeyOAuth2ClientAuthenticationEnabledMethods), true
 }
 
 func (p *DefaultProvider) MirrorTopLevelClaims(ctx context.Context) bool {

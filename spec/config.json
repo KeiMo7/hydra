@@ -733,6 +733,22 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "client_authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Configures registrable OAuth 2.0 client authentication methods. The identifier list is the single effective set used by discovery, client validation, endpoint authentication, rotation eligibility and audit classification.",
+          "properties": {
+            "enabled_methods": {
+              "type": "array",
+              "uniqueItems": true,
+              "description": "Explicit effective client authentication method identifiers. If unset, every registered built-in and external method is enabled. Set to an empty array to disable all methods without stopping the process.",
+              "items": {
+                "type": "string"
+              },
+              "examples": [["client_secret_basic", "client_secret_post", "private_key_jwt", "none"]]
+            }
+          }
+        },
         "expose_internal_errors": {
           "type": "boolean",
           "description": "Set this to true if you want to share error debugging information with your OAuth 2.0 clients. Keep in mind that debug information is very valuable when dealing with errors, but might also expose database error codes and similar errors.",

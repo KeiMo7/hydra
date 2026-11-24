@@ -14,6 +14,7 @@ import (
 
 	"github.com/ory/x/httpx"
 
+	"github.com/ory/hydra/v2/clientauth"
 	"github.com/ory/hydra/v2/driver/config"
 	"github.com/ory/hydra/v2/fosite"
 	"github.com/ory/hydra/v2/fosite/compose"
@@ -174,7 +175,12 @@ func (c *Config) GetMinParameterEntropy(_ context.Context) int {
 }
 
 func (c *Config) GetClientAuthenticationStrategy(context.Context) fosite.ClientAuthenticationStrategy {
-	// Fosite falls back to the default fosite.Fosite.DefaultClientAuthenticationStrategy when this is nil.
+	// The driver registry owns discovery, validation, policy, audit and
+	// dispatch. Lightweight config tests without that seam retain Fosite's
+	// default strategy by returning nil.
+	if provider, ok := c.deps.(interface{ ClientAuthRegistry() *clientauth.Registry }); ok {
+		return provider.ClientAuthRegistry().Authenticate
+	}
 	return nil
 }
 
